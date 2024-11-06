@@ -13,9 +13,9 @@ from tqdm import tqdm
 import re
 
 tf.config.set_visible_devices([], "GPU")
-data_path = "/home/vanjani/codes/data/final_data/basketball"
+data_path = "/home/kkuryshev/audio-pipeline/final_data/knife_cleanup"
 
-class VanjaniBasketball(tfds.core.GeneratorBasedBuilder):
+class KnifeCleanup(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for example dataset."""
 
     VERSION = tfds.core.Version('1.0.0')
@@ -33,29 +33,29 @@ class VanjaniBasketball(tfds.core.GeneratorBasedBuilder):
             features=tfds.features.FeaturesDict({
                 'steps': tfds.features.Dataset({
                     'observation': tfds.features.FeaturesDict({
-                        'image_depthai_14': tfds.features.Image(
+                        'side_cam': tfds.features.Image( #OAK-D LITE
                             shape=(512, 512, 3),
                             dtype=np.uint8,
                             encoding_format='png',
-                            doc='Main camera RGB observation.',
+                            doc='Side camera (OAK-D Lite) RGB observation.',
                         ),
-                        'image_depthai_18': tfds.features.Image(
+                        'top_cam': tfds.features.Image( #OAK-D LITE
                             shape=(512, 512, 3),
                             dtype=np.uint8,
                             encoding_format='png',
-                            doc='Wrist camera RGB observation.',
+                            doc='Top camera (OAK-D Lite) RGB observation.',
                         ),
-                        'image_gopro': tfds.features.Image(
+                        'wrist_cam': tfds.features.Image( #OAK-D SR
                             shape=(512, 512, 3),
                             dtype=np.uint8,
                             encoding_format='png',
-                            doc='Wrist camera RGB observation.',
+                            doc='Wrist camera (OAK-D SR) RGB observation.',
                         ),
-                        'image_realsense': tfds.features.Image(
+                        'front_cam': tfds.features.Image( #Realsense
                             shape=(512, 512, 3),
                             dtype=np.uint8,
                             encoding_format='png',
-                            doc='Wrist camera RGB observation.',
+                            doc='Front camera (RealSense) RGB observation.',
                         ),
                         'joint_state_pos': tfds.features.Tensor(
                             shape=(7,),
@@ -138,6 +138,9 @@ class VanjaniBasketball(tfds.core.GeneratorBasedBuilder):
                         dtype=np.bool_,
                         doc='True on last step of the episode if it is a terminal step, True for demos.'
                     ),
+                    'language_instruction': tfds.features.Text(
+                        doc='Language Instruction.'
+                    ),
                     'language_embedding': tfds.features.Tensor(
                         shape=(1, 512),
                         dtype=np.float32,
@@ -193,9 +196,15 @@ def _parse_example(episode_path, embed=None):
                 image_dir_full_path = os.path.join(data_field_full_path, image_dir)
                 cam1_image_vector = create_img_vector(image_dir_full_path)
                 data.update({image_dir: cam1_image_vector})
-        else:
-            # load robot data
-            data.update({data_field[:data_field.find(".")]: torch.load(data_field_full_path).numpy()})
+        elif os.path.isdir(data_field_full_path) and data_field == "'201 leader'":
+            # load leader data
+            for leader_vec in os.listdir(data_field_full_path):
+                leader_vec_full_path = os.path.join(data_field_full_path, leader_vec)
+                data.update({f"leader_{leader_vec[:leader_vec.find(".")]}": torch.load(leader_vec_full_path).numpy()})
+        elif os.path.isdir(data_field_full_path) and data_field == "'202 follower'":
+            for follower_vec in os.listdir(data_field_full_path):
+                follower_vec_full_path = os.path.join(data_field_full_path, follower_vec)
+                data.update({f"follower_{follower_vec[:follower_vec.find(".")]}": torch.load(follower_vec_full_path).numpy()})
 
     # print(data.keys())
     trajectory_length = len(data["follower_joint_pos"]) if len(data["follower_joint_pos"]) < len(data["GoPro"]) else len(data["GoPro"])
@@ -211,10 +220,10 @@ def _parse_example(episode_path, embed=None):
 
         episode.append({
             'observation': {
-                'image_depthai_14': data['DepthAI_14442C10113FE2D200_orig'][i],
-                'image_depthai_18': data['DepthAI_18443010A1A7701200_orig'][i],
-                'image_gopro': data['GoPro'][i],
-                'image_realsense': data['RealSense_243322073029_orig'][i],
+                'image_top_cam': data['top_cam'][i],
+                'image_side_cam': data['side_cam'][i],
+                'image_wrist_cam': data['wrist_cam'][i],
+                'image_front_cam': data['front_cam'][i],
                 'joint_state_pos': data['follower_joint_pos'][i],
                 'joint_state_vel': data['follower_joint_vel'][i],
                 'end_effector_pos': data['follower_ee_pos'][i],
@@ -233,6 +242,7 @@ def _parse_example(episode_path, embed=None):
             'is_first': i == 0,
             'is_last': i == (trajectory_length - 1),
             'is_terminal': i == (trajectory_length - 1),
+            'language_instruction': "Pick up the knife and put it in the box.",
             'language_embedding': language_embedding,
         })
 
