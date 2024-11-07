@@ -33,25 +33,25 @@ class KnifeCleanup(tfds.core.GeneratorBasedBuilder):
             features=tfds.features.FeaturesDict({
                 'steps': tfds.features.Dataset({
                     'observation': tfds.features.FeaturesDict({
-                        'side_cam': tfds.features.Image( #OAK-D LITE
+                        'image_side_cam': tfds.features.Image( #OAK-D LITE
                             shape=(512, 512, 3),
                             dtype=np.uint8,
                             encoding_format='png',
                             doc='Side camera (OAK-D Lite) RGB observation.',
                         ),
-                        'top_cam': tfds.features.Image( #OAK-D LITE
+                        'image_top_cam': tfds.features.Image( #OAK-D LITE
                             shape=(512, 512, 3),
                             dtype=np.uint8,
                             encoding_format='png',
                             doc='Top camera (OAK-D Lite) RGB observation.',
                         ),
-                        'wrist_cam': tfds.features.Image( #OAK-D SR
+                        'image_wrist_cam': tfds.features.Image( #OAK-D SR
                             shape=(512, 512, 3),
                             dtype=np.uint8,
                             encoding_format='png',
                             doc='Wrist camera (OAK-D SR) RGB observation.',
                         ),
-                        'front_cam': tfds.features.Image( #Realsense
+                        'image_front_cam': tfds.features.Image( #Realsense
                             shape=(512, 512, 3),
                             dtype=np.uint8,
                             encoding_format='png',
@@ -194,20 +194,24 @@ def _parse_example(episode_path, embed=None):
             # load images
             for image_dir in os.listdir(data_field_full_path):
                 image_dir_full_path = os.path.join(data_field_full_path, image_dir)
+                #print(f"loading: {image_dir_full_path}")
                 cam1_image_vector = create_img_vector(image_dir_full_path)
                 data.update({image_dir: cam1_image_vector})
-        elif os.path.isdir(data_field_full_path) and data_field == "'201 leader'":
+        elif os.path.isdir(data_field_full_path) and data_field == "201 leader":
             # load leader data
             for leader_vec in os.listdir(data_field_full_path):
                 leader_vec_full_path = os.path.join(data_field_full_path, leader_vec)
-                data.update({f"leader_{leader_vec[:leader_vec.find(".")]}": torch.load(leader_vec_full_path).numpy()})
-        elif os.path.isdir(data_field_full_path) and data_field == "'202 follower'":
+                #print(f"loading: {leader_vec_full_path}")
+                data.update({f"leader_{leader_vec[:leader_vec.find('.')]}": torch.load(leader_vec_full_path).numpy()})
+        elif os.path.isdir(data_field_full_path) and data_field == "202 follower":
+            # load follower data
             for follower_vec in os.listdir(data_field_full_path):
                 follower_vec_full_path = os.path.join(data_field_full_path, follower_vec)
-                data.update({f"follower_{follower_vec[:follower_vec.find(".")]}": torch.load(follower_vec_full_path).numpy()})
+                #print(f"loading: {follower_vec_full_path}")
+                data.update({f"follower_{follower_vec[:follower_vec.find('.')]}": torch.load(follower_vec_full_path).numpy()})
 
     # print(data.keys())
-    trajectory_length = len(data["follower_joint_pos"]) if len(data["follower_joint_pos"]) < len(data["GoPro"]) else len(data["GoPro"])
+    trajectory_length = len(data["follower_joint_pos"]) #if len(data["follower_joint_pos"]) < len(data["GoPro"]) else len(data["GoPro"])
     # print("traj_len:", len(data["follower_joint_pos"]))
     # print("GoPro len:", len(data["GoPro"]))
 
@@ -289,5 +293,6 @@ if __name__ == "__main__":
     raw_dirs = []
     get_trajectorie_paths_recursive(data_path, raw_dirs)
     for trajectorie_path in tqdm(raw_dirs):
+        #print(f"entering: {trajectorie_path}")
         _, sample = _parse_example(trajectorie_path, embed)
-        # print(sample)
+        #print(sample)
