@@ -68,7 +68,7 @@ class KnifeCleanup(tfds.core.GeneratorBasedBuilder):
                             doc='Robot joint velocities. Consists of [7x joint velocities]',
                         ),
                         'end_effector_pos': tfds.features.Tensor(
-                            shape=(7,),
+                            shape=(6,),
                             dtype=np.float32,
                             doc='Current End Effector position in Cartesian space',
                         ),
@@ -83,7 +83,7 @@ class KnifeCleanup(tfds.core.GeneratorBasedBuilder):
                         ),
                     }),
                     'action': tfds.features.Tensor(
-                        shape=(8,),
+                        shape=(7,),
                         dtype=np.float32,
                         doc='Delta robot action, consists of [3x delta_end_effector_pos, '
                             '3x delta_end_effector_ori (euler: roll, pitch, yaw), 1x des_gripper_width].',
@@ -105,7 +105,7 @@ class KnifeCleanup(tfds.core.GeneratorBasedBuilder):
                         doc='Robot action in joint space, consists of [7x joint velocities]',
                     ),
                     'action_ee_pos': tfds.features.Tensor(
-                        shape=(7,),
+                        shape=(6,),
                         dtype=np.float32,
                         doc='Delta robot action in joint space, consists of [7x joint states]',
                     ),
@@ -219,9 +219,11 @@ def _parse_example(episode_path, embed=None):
     for i in range(trajectory_length):
         # compute Kona language embedding
         language_embedding = [np.zeros(512)]
-        action = np.append(data['leader_ee_pos'][i], data['leader_gripper_state'][i])
+        leader_ee_pos = np.append(data['leader_ee_pos'][i][:3], convert_from_quat_to_euler(data['leader_ee_pos'][i][3:]))
+        follower_ee_pos = np.append(data['follower_ee_pos'][i][:3], convert_from_quat_to_euler(data['follower_ee_pos'][i][3:]))
+        action = np.append(leader_ee_pos, data['leader_gripper_state'][i])
         action_joint = np.append(data['leader_joint_pos'][i], data['leader_gripper_state'][i])
-
+        
         episode.append({
             'observation': {
                 'image_top_cam': data['top_cam'][i],
@@ -230,15 +232,15 @@ def _parse_example(episode_path, embed=None):
                 'image_front_cam': data['front_cam'][i],
                 'joint_state_pos': data['follower_joint_pos'][i],
                 'joint_state_vel': data['follower_joint_vel'][i],
-                'end_effector_pos': data['follower_ee_pos'][i],
+                'end_effector_pos': np.float32(follower_ee_pos),
                 'end_effector_vel': data['follower_ee_vel'][i],
                 'gripper_state': data['follower_gripper_state'][i]
             },
-            'action': action,
-            'action_joint': action_joint,
+            'action': np.float32(action),
+            'action_joint': np.float32(action_joint),
             'action_joint_state': data['leader_joint_pos'][i],
             'action_joint_vel': data['leader_joint_vel'][i],
-            'action_ee_pos': data['leader_ee_pos'][i],
+            'action_ee_pos': np.float32(leader_ee_pos),
             'action_ee_vel': data['leader_ee_vel'][i],
             'action_gripper_width': data['leader_gripper_state'][i],
             'discount': 1.0,
@@ -261,6 +263,11 @@ def _parse_example(episode_path, embed=None):
 
     # if you want to skip an example for whatever reason, simply return None
     return episode_path, sample
+
+def convert_from_quat_to_euler(quat_vector):
+    assert np.shape(quat_vector)[-1] == 4, f"Vector is not a quaternion with shape (?,4), but has shape: {np.shape(quat_vector)}"
+    return Rotation.from_quat(quat_vector).as_euler('xyz', degrees=True)
+
 
 def sorted_alphanumeric(data):
     convert = lambda text: int(text) if text.isdigit() else text.lower()
